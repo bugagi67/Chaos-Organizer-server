@@ -22,7 +22,7 @@ if (!fs.existsSync(UPLOAD_DIR)) {
   fs.mkdirSync(UPLOAD_DIR);
 }
 
-const messageHistory = [];
+let messageHistory = [];
 
 const id = uuidv4();
 messageHistory.push({
@@ -85,7 +85,6 @@ router.post("/upload", async (ctx) => {
     const filePath = path.join(UPLOAD_DIR, fileName);
 
     const contentType = file.mimetype || "application/octet-stream";
-
 
     try {
       await fsPromises.rename(file.filepath, filePath);
@@ -194,9 +193,83 @@ wss.on("connection", (ws) => {
         });
         break;
       }
+
+      case "edit_message": {
+        const { id, content } = message;
+        messageHistory.find((item) => item.id === id).content = content;
+
+        const editMessage = {
+          id: id,
+          content: content,
+          edited: "success",
+        };
+
+        wss.clients.forEach((client) => {
+          if (client.readyState === WS.OPEN) {
+            client.send(
+              JSON.stringify({ type: "edited_message", ...editMessage }),
+            );
+          }
+        });
+        break;
+      }
+
+      case "remove_message": {
+        const { content: itemId } = message;
+        const deletedElement = messageHistory.find(
+          (item) => item.id === itemId,
+        );
+        console.log(deletedElement);
+
+        if (itemId) {
+          console.log(itemId);
+          const newMessageHistory = messageHistory.filter(
+            (item) => item.id !== itemId,
+          );
+          messageHistory = newMessageHistory;
+          console.log(messageHistory);
+
+          if (deletedElement.contentType !== "text") {
+            const filePath = "." + trimUrl(deletedElement.content);
+            console.log(filePath);
+
+            fs.unlink(filePath, (err) => {
+              if (err) console.error("Ошибка при удалении файла: ", err);
+              else console.log("Файл успешно удален");
+            });
+          }
+        }
+
+        const removeMessage = {
+          id: message.itemId,
+          delete: "success",
+        };
+
+        wss.clients.forEach((client) => {
+          if (client.readyState === WS.OPEN) {
+            client.send(
+              JSON.stringify({
+                type: "confirm_remove_message",
+                ...removeMessage,
+              }),
+            );
+          }
+        });
+        break;
+      }
     }
   });
 });
+
+function trimUrl(url) {
+  try {
+    const urlObj = new URL(url);
+    return urlObj.pathname;
+  } catch (error) {
+    console.error("Некорректный URL:", error);
+    return null;
+  }
+}
 
 server.listen(port, () => {
   console.log(`Server is running on port ${port}`);
