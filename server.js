@@ -214,22 +214,39 @@ wss.on("connection", (ws) => {
         break;
       }
 
+      case "geolocation_message": {
+        const { content, contentType } = message;
+        const timeStamp = format(new Date(), "HH:mm dd.MM.yyyy");
+        const id = uuidv4();
+        const newMessage = { id, contentType, content, timeStamp };
+        messageHistory.push(newMessage);
+        wss.clients.forEach((client) => {
+          if (client.readyState === WS.OPEN) {
+            client.send(JSON.stringify({ type: "geo_message", ...newMessage }));
+          }
+        });
+        break;
+      }
+
       case "remove_message": {
         const { content: itemId } = message;
         const deletedElement = messageHistory.find(
           (item) => item.id === itemId,
         );
-        console.log(deletedElement);
 
         if (itemId) {
-          console.log(itemId);
           const newMessageHistory = messageHistory.filter(
             (item) => item.id !== itemId,
           );
           messageHistory = newMessageHistory;
-          console.log(messageHistory);
 
-          if (deletedElement.contentType !== "text") {
+          console.log(deletedElement.contentType);
+          if (
+            deletedElement.contentType === "text" ||
+            deletedElement.contentType === "geolocation"
+          ) {
+              console.log("Удаление файла не требуется")
+          } else {
             const filePath = "." + trimUrl(deletedElement.content);
             console.log(filePath);
 
@@ -241,7 +258,7 @@ wss.on("connection", (ws) => {
         }
 
         const removeMessage = {
-          id: message.itemId,
+          id: itemId,
           delete: "success",
         };
 
