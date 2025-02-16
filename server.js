@@ -11,7 +11,8 @@ const cors = require("koa-cors");
 const mime = require("mime-types");
 const serve = require("koa-static");
 const { promises: fsPromises } = require("fs");
-const BASEURL = `http://localhost:9010`;
+const BASEURL = `https://chaos-organizer-server-o44h.onrender.com`;
+// const BASEURL = `http://localhost:9010`;
 
 const app = new Koa();
 const router = new Router();
