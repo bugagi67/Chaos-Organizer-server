@@ -11,8 +11,8 @@ const cors = require("koa-cors");
 const mime = require("mime-types");
 const serve = require("koa-static");
 const { promises: fsPromises } = require("fs");
-const BASEURL = `https://chaos-organizer-server-o44h.onrender.com`;
-// const BASEURL = `http://localhost:9010`;
+// const BASEURL = `https://chaos-organizer-server-o44h.onrender.com`;
+const BASEURL = `http://localhost:9010`;
 
 const app = new Koa();
 const router = new Router();
@@ -25,30 +25,19 @@ if (!fs.existsSync(UPLOAD_DIR)) {
 
 let messageHistory = [];
 
-const id = uuidv4();
-messageHistory.push({
-  id: id,
-  contentType: "text",
-  content: "GHbdt",
-  timeStamp: format(new Date(), "HH:mm dd.MM.yyyy"),
-});
+function addMessage(count) {
+  for (let i = 0; i < count; i++) {
+    const id = uuidv4();
+    messageHistory.push({
+      id: id,
+      contentType: "text",
+      content: `${i}`,
+      timeStamp: format(new Date(), "HH:mm dd.MM.yyyy"),
+    });
+  }
+}
 
-const id1 = uuidv4();
-messageHistory.push({
-  id: id1,
-  contentType: "text",
-  content: "GHbdt",
-  timeStamp: format(new Date(), "HH:mm dd.MM.yyyy"),
-});
-
-const id2 = uuidv4();
-
-messageHistory.push({
-  id: id2,
-  contentType: "text",
-  content: "GHbdt",
-  timeStamp: format(new Date(), "HH:mm dd.MM.yyyy"),
-});
+addMessage(30);
 
 app.use(
   koaBody({
@@ -105,7 +94,7 @@ router.post("/upload", async (ctx) => {
           break;
         }
       } catch (error) {
-        console.error("Файл пока не доступен");
+        console.error("Файл пока не доступен", error);
       }
       await new Promise((resolve) => setTimeout(resolve, 500));
     }
@@ -174,13 +163,37 @@ const wss = new WS.Server({ server });
 wss.on("connection", (ws) => {
   console.log(messageHistory);
 
+  const latestMessages = messageHistory.slice(-12);
   ws.send(
-    JSON.stringify({ type: "message_history", messages: messageHistory }),
+    JSON.stringify({ type: "message_history", messages: latestMessages }),
   );
 
   ws.on("message", (data) => {
     const message = JSON.parse(data);
+
     switch (message.type) {
+      case "load_more": {
+        const { lastMessageId } = message;
+        const lastMessageIndex = messageHistory.findIndex(
+          (msg) => msg.id === lastMessageId,
+        );
+        console.log(lastMessageIndex);
+
+        if (lastMessageIndex > 0) {
+          const start = Math.max(0, lastMessageIndex - 12);
+          const olderMessages = messageHistory
+            .slice(start, lastMessageIndex)
+            .reverse();
+
+          ws.send(
+            JSON.stringify({ type: "more_messages", messages: olderMessages }),
+          );
+        } else {
+          ws.send(JSON.stringify({ type: "no_more_messages" }));
+        }
+        break;
+      }
+
       case "send_message": {
         const { content, contentType = "text" } = message;
         const timeStamp = format(new Date(), "HH:mm dd.MM.yyyy");
@@ -246,7 +259,7 @@ wss.on("connection", (ws) => {
             deletedElement.contentType === "text" ||
             deletedElement.contentType === "geolocation"
           ) {
-              console.log("Удаление файла не требуется")
+            console.log("Удаление файла не требуется");
           } else {
             const filePath = "." + trimUrl(deletedElement.content);
             console.log(filePath);
